@@ -75,12 +75,21 @@ public class MapPanel extends JPanel {
     }
 
     public void setScaleManual(double pxPerMeter) {
+        double centerX = offsetX + getWidth() / 2.0 / scale;
+        double centerY = offsetY + getHeight() / 2.0 / scale;
+
         this.scale = pxPerMeter;
+
+        // смещаем так, чтобы центр остался на месте
+        offsetX = centerX - getWidth() / 2.0 / scale;
+        offsetY = centerY - getHeight() / 2.0 / scale;
+
         if (scaleField != null) {
             scaleField.setText(String.format("%.0f", 1.0 / scale * getWidth()));
         }
         repaint();
     }
+
 
     public void setLoading(boolean loading) {
         this.loading = loading;
@@ -217,23 +226,51 @@ public class MapPanel extends JPanel {
     }
 
     private void updateTooltip(MouseEvent e) {
+        if (points.isEmpty()) {
+            tooltipWindow.setVisible(false);
+            return;
+        }
+
         boolean onPoint = false;
+
         for (MapPoint p : points) {
             Point screen = worldToScreen(p.getX(), p.getY());
+
+            // Игнорируем точки вне панели (или если ещё не рассчитаны)
+            if (screen.x < 0 || screen.y < 0 || screen.x > getWidth() || screen.y > getHeight())
+                continue;
+
+            // Проверяем, близко ли к курсору
             if (screen.distance(e.getX(), e.getY()) <= 10) {
-                tooltipLabel.setText("<html>ID: " + p.getId() +
-                        "<br>X: " + p.getX() +
-                        "<br>Y: " + p.getY() +
-                        "<br>Z: " + p.getZ() +
-                        "<br>Комментарий: " + p.getComment() + "</html>");
-                tooltipWindow.setLocation(e.getXOnScreen() + 10, e.getYOnScreen() + 10);
-                tooltipWindow.pack();
-                tooltipWindow.setVisible(true);
-                onPoint = true;
+                // Собираем текст тултипа
+                StringBuilder sb = new StringBuilder("<html>");
+                sb.append("ID: ").append(p.getId()).append("<br>");
+                sb.append("X: ").append(p.getX()).append("<br>");
+                sb.append("Y: ").append(p.getY()).append("<br>");
+                sb.append("Z: ").append(p.getZ());
+                if (p.getComment() != null && !p.getComment().isBlank()) {
+                    sb.append("<br>Комментарий: ").append(p.getComment());
+                }
+                sb.append("</html>");
+
+                String text = sb.toString();
+
+                // Показываем только если текст реально содержит данные
+                if (!text.equals("<html></html>")) {
+                    tooltipLabel.setText(text);
+                    tooltipWindow.setLocation(e.getXOnScreen() + 10, e.getYOnScreen() + 10);
+                    tooltipWindow.pack();
+                    tooltipWindow.setVisible(true);
+                    onPoint = true;
+                }
+
                 break;
             }
         }
-        if (!onPoint) tooltipWindow.setVisible(false);
+
+        if (!onPoint) {
+            tooltipWindow.setVisible(false);
+        }
     }
 
     @Override

@@ -19,6 +19,9 @@ public class MainApp {
             // ===== Карта =====
             MapPanel map = new MapPanel();
 
+            // Задаём предпочтительный размер карты
+            map.setPreferredSize(new Dimension(1000, 700));
+
             // ===== Верхняя панель =====
             JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
@@ -33,7 +36,6 @@ public class MainApp {
             applyScale.addActionListener(e -> {
                 try {
                     double ratio = Double.parseDouble(scaleField.getText().trim());
-                    // вычисляем scale в пикселях на метр (1 метр = ? пикселей)
                     double pxPerMeter = map.getWidth() / ratio;
                     map.setScaleManual(pxPerMeter);
                 } catch (Exception ex) {
@@ -45,24 +47,28 @@ public class MainApp {
             controls.add(new JSeparator(SwingConstants.VERTICAL));
 
             // --- Инструменты линий ---
-            JButton lineBlue = new JButton("Линия (синяя)");
-            JButton lineRedDashed = new JButton("Пунктир (красный)");
-            JButton lineGreen = new JButton("Линия (зелёная)");
             JButton lineBlack = new JButton("Линия (чёрная)");
+            JButton lineBlue = new JButton("Линия (синяя)");
+            JButton lineGreen = new JButton("Линия (зелёная)");
+            JButton lineRedDashed = new JButton("Пунктир (красный)");
             JButton finishLine = new JButton("Завершить линию");
             JButton clearLines = new JButton("Очистить линии");
 
-            lineBlue.addActionListener(e -> map.startLineDrawing(Color.BLUE, MapLine.LineStyle.SOLID));
-            lineRedDashed.addActionListener(e -> map.startLineDrawing(Color.RED, MapLine.LineStyle.DASHED));
-            lineGreen.addActionListener(e -> map.startLineDrawing(Color.GREEN, MapLine.LineStyle.SOLID));
             lineBlack.addActionListener(e -> map.startLineDrawing(Color.BLACK, MapLine.LineStyle.SOLID));
+            lineBlue.addActionListener(e -> map.startLineDrawing(Color.BLUE, MapLine.LineStyle.SOLID));
+            lineGreen.addActionListener(e -> map.startLineDrawing(Color.GREEN, MapLine.LineStyle.SOLID));
+
+            lineRedDashed.addActionListener(e -> map.startLineDrawing(Color.RED, MapLine.LineStyle.DASHED));
+
             finishLine.addActionListener(e -> map.finishLineDrawing());
             clearLines.addActionListener(e -> map.clearLines());
 
-            controls.add(lineBlue);
-            controls.add(lineRedDashed);
-            controls.add(lineGreen);
             controls.add(lineBlack);
+            controls.add(lineBlue);
+            controls.add(lineGreen);
+
+            controls.add(lineRedDashed);
+
             controls.add(finishLine);
             controls.add(clearLines);
 
@@ -79,7 +85,7 @@ public class MainApp {
                         @Override
                         protected Void doInBackground() {
                             map.setLoading(true);
-                            map.loadPointsFromFile(fileToLoad); // метод loadPointsFromFile реализован в MapPanel
+                            map.loadPointsFromFile(fileToLoad);
                             return null;
                         }
 
@@ -113,7 +119,12 @@ public class MainApp {
             frame.add(controls, BorderLayout.NORTH);
             frame.add(map, BorderLayout.CENTER);
 
-            frame.setSize(1200, 800);
+            // Автоматически подбираем размер окна под панели и карту
+            frame.pack();
+
+            // Минимальный размер, чтобы нельзя было сильно уменьшить
+            frame.setMinimumSize(new Dimension(800, 600));
+
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
 
