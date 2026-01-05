@@ -1,0 +1,56 @@
+plugins {
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.0.14'
+}
+
+repositories {
+    mavenCentral()
+}
+
+// JavaFX версия
+def javafxVersion = "21.0.2"
+
+dependencies {
+    implementation "org.openjfx:javafx-base:${javafxVersion}"
+    implementation "org.openjfx:javafx-controls:${javafxVersion}"
+    implementation "org.openjfx:javafx-graphics:${javafxVersion}"
+    implementation "org.openjfx:javafx-swing:${javafxVersion}"  // <-- для SwingFXUtils
+}
+
+javafx {
+    version = javafxVersion
+    modules = [ 'javafx.controls', 'javafx.graphics', 'javafx.swing' ]
+}
+
+application {
+    // Пакет + класс с main()
+    mainClass = 'org.example.MainApp'
+}
+
+// Настройка Java для jpackage
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21) // Можно указать JDK, который установлен
+    }
+}
+
+// jpackage task (для Linux/Windows/Mac)
+tasks.register("packageApp", Exec) {
+    group = "distribution"
+    description = "Builds a standalone application using jpackage"
+
+    dependsOn(tasks.jar)
+
+    def javafxLibPath = System.getenv("JAVA_FX_SDK") ?: "/path/to/javafx-sdk-21.0.2/lib"
+
+    commandLine = [
+            "jpackage",
+            "--input", "build/libs",
+            "--name", "MapDemo",
+            "--main-jar", "mapdemo.jar",
+            "--main-class", "mapdemo.MainApp",
+            "--type", "app-image",
+            "--module-path", javafxLibPath,
+            "--add-modules", "javafx.controls,javafx.graphics"
+    ]
+}
