@@ -26,35 +26,6 @@ public class MapPanel extends JPanel {
     private final JLabel tooltipLabel = new JLabel();
     private final JWindow tooltipWindow;
 
-    public void showPrintPreview() {
-        PrinterJob job = PrinterJob.getPrinterJob();
-        job.setJobName("Печать карты");
-
-        job.setPrintable((graphics, pageFormat, pageIndex) -> {
-            if (pageIndex > 0) return Printable.NO_SUCH_PAGE;
-
-            Graphics2D g2 = (Graphics2D) graphics;
-            g2.translate(pageFormat.getImageableX(), pageFormat.getImageableY());
-            double scaleX = pageFormat.getImageableWidth() / getWidth();
-            double scaleY = pageFormat.getImageableHeight() / getHeight();
-            double printScale = Math.min(scaleX, scaleY);
-            g2.scale(printScale, printScale);
-
-            // рисуем всю панель на странице
-            paint(g2);
-
-            return Printable.PAGE_EXISTS;
-        });
-
-        if (job.printDialog()) { // Показываем диалог выбора принтера
-            try {
-                job.print();
-            } catch (PrinterException ex) {
-                ex.printStackTrace();
-            }
-        }
-    }
-
     public MapPanel() {
         setBackground(Color.WHITE);
         enableDrag();
@@ -75,10 +46,11 @@ public class MapPanel extends JPanel {
                     double dx = e.getX() - screen.x;
                     double dy = e.getY() - screen.y;
                     double distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance <= 10) { // увеличил область срабатывания
+                    if (distance <= 10) {
                         tooltipLabel.setText("<html>ID: " + p.getId() +
                                 "<br>X: " + p.getX() +
                                 "<br>Y: " + p.getY() +
+                                "<br>Z: " + p.getZ() +
                                 "<br>Комментарий: " + p.getComment() + "</html>");
                         tooltipWindow.setLocation(e.getXOnScreen() + 10, e.getYOnScreen() + 10);
                         tooltipWindow.pack();
@@ -95,10 +67,13 @@ public class MapPanel extends JPanel {
     public void loadTestPoints() {
         points.clear();
         points.addAll(List.of(
-                new MapPoint(10000, 100, 1, "Начало"),
-                new MapPoint(4000, 300, 2, "Точка интереса"),
-                new MapPoint(8000, 600, 3, "Метка 3"),
-                new MapPoint(12000, 900, 4, "Последняя")
+                new MapPoint(10000, 100, 50, 1, "Начало"),           // Z=50
+                new MapPoint(4000, 300, 20, 2, "Точка интереса"),    // Z=20
+                new MapPoint(8000, 600, 70, 3, "Метка 3"),           // Z=70
+                new MapPoint(12000, 900, 90, 4, "Последняя"),        // Z=90
+                new MapPoint(-500, 200, 10, 5, "Отрицательная X"),   // Z=10
+                new MapPoint(600, -300, 30, 6, "Отрицательная Y"),   // Z=30
+                new MapPoint(-200, -150, 60, 7, "Отрицательные X и Y") // Z=60
         ));
         fitPointsToScreen();
         repaint();
@@ -112,12 +87,13 @@ public class MapPanel extends JPanel {
             while ((line = br.readLine()) != null) {
                 if (firstLine) { firstLine = false; continue; }
                 String[] parts = line.split(",");
-                if (parts.length >= 4) {
+                if (parts.length >= 5) {
                     int id = Integer.parseInt(parts[0].trim());
                     double x = Double.parseDouble(parts[1].trim());
                     double y = Double.parseDouble(parts[2].trim());
-                    String comment = parts[3].trim();
-                    loadedPoints.add(new MapPoint(x, y, id, comment));
+                    double z = Double.parseDouble(parts[3].trim());
+                    String comment = parts[4].trim();
+                    loadedPoints.add(new MapPoint(x, y, z, id, comment));
                 }
             }
         } catch (Exception e) {
@@ -206,44 +182,66 @@ public class MapPanel extends JPanel {
         Graphics2D g2 = (Graphics2D) g;
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        // фон
         g2.setColor(getBackground());
         g2.fillRect(0, 0, getWidth(), getHeight());
 
-        // сетка
         drawGrid(g2);
-
-        // красные оси
         drawGuides(g2);
-
-        // точки
         drawPoints(g2);
     }
 
     private void drawPoints(Graphics2D g) {
-        int baseSize = 8; // базовый размер точки
-        int size = Math.max(baseSize, (int)(baseSize * scale)); // увеличиваем размер точек при зуме
+        int baseSize = 8;
+        int size = Math.max(baseSize, (int)(baseSize * scale));
+        g.setFont(new Font("Arial", Font.PLAIN, Math.max(10, (int)(10 * scale))));
 
-        g.setFont(new Font("Arial", Font.PLAIN, Math.max(10, (int)(10 * scale)))); // размер шрифта зависит от scale
-        g.setColor(Color.RED);
+        // вычисляем среднее Z
+        double avgZ = points.stream().mapToDouble(MapPoint::getZ).average().orElse(0);
+
+        // находим экстремумы для нормализации
+        double maxZ = points.stream().mapToDouble(MapPoint::getZ).max().orElse(avgZ);
+        double minZ = points.stream().mapToDouble(MapPoint::getZ).min().orElse(avgZ);
 
         for (MapPoint p : points) {
             Point pt = worldToScreen(p.getX(), p.getY());
 
-            // рисуем только видимые точки
             if (pt.x < -size || pt.y < -size || pt.x > getWidth() + size || pt.y > getHeight() + size)
                 continue;
 
-            // точка
-            g.fillOval(pt.x - size/2, pt.y - size/2, size, size);
+            Color pointColor;
 
-            // текст рядом с точкой
+            if (p.getZ() > avgZ) {
+                // выше среднего → зеленый, чем выше Z, тем светлее
+                float ratio = (float) ((p.getZ() - avgZ) / (maxZ - avgZ + 0.0001));
+                ratio = Math.min(1f, ratio);
+                pointColor = new Color(0f, 0.5f + 0.5f * ratio, 0f); // темно-зеленый → светло-зеленый
+            } else if (p.getZ() < avgZ) {
+                // ниже среднего → синий, чем ниже Z, тем темнее
+                float ratio = (float) ((avgZ - p.getZ()) / (avgZ - minZ + 0.0001));
+                ratio = Math.min(1f, ratio);
+                pointColor = new Color(0f, 0f, 0.5f + 0.5f * (1 - ratio)); // светло-синий → темно-синий
+            } else {
+                // среднее → серый
+                pointColor = Color.GRAY;
+            }
+
+            // рисуем точку
+            g.setColor(pointColor);
+            g.fillOval(pt.x - size / 2, pt.y - size / 2, size, size);
+
+            // подписываем ID
             g.setColor(Color.BLACK);
-            g.drawString(String.valueOf(p.getId()), pt.x + size/2 + 2, pt.y - size/2 - 2);
-            g.setColor(Color.RED); // возвращаем цвет для точек на всякий случай
+            g.drawString(String.valueOf(p.getId()), pt.x + size / 2 + 2, pt.y - size / 2 - 2);
         }
     }
 
+    private double getMaxZ() {
+        return points.stream().mapToDouble(MapPoint::getZ).max().orElse(0);
+    }
+
+    private double getMinZ() {
+        return points.stream().mapToDouble(MapPoint::getZ).min().orElse(0);
+    }
 
     private void drawGuides(Graphics2D g) {
         int width = getWidth();
@@ -284,6 +282,33 @@ public class MapPanel extends JPanel {
             int sy = (int)((y - offsetY)*scale);
             g.drawLine(0,sy,getWidth(),sy);
             g.drawString(String.valueOf((int)y), 2, sy-2);
+        }
+    }
+
+    public void showPrintPreview() {
+        PrinterJob job = PrinterJob.getPrinterJob();
+        job.setJobName("Печать карты");
+
+        job.setPrintable((graphics, pageFormat, pageIndex) -> {
+            if (pageIndex > 0) return Printable.NO_SUCH_PAGE;
+
+            Graphics2D g2 = (Graphics2D) graphics;
+            g2.translate(pageFormat.getImageableX(), pageFormat.getImageableY());
+            double scaleX = pageFormat.getImageableWidth() / getWidth();
+            double scaleY = pageFormat.getImageableHeight() / getHeight();
+            double printScale = Math.min(scaleX, scaleY);
+            g2.scale(printScale, printScale);
+
+            paint(g2);
+            return Printable.PAGE_EXISTS;
+        });
+
+        if (job.printDialog()) {
+            try {
+                job.print();
+            } catch (PrinterException ex) {
+                ex.printStackTrace();
+            }
         }
     }
 }
