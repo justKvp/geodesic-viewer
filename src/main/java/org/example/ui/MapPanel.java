@@ -6,6 +6,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
+import java.awt.print.*;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,12 +26,40 @@ public class MapPanel extends JPanel {
     private final JLabel tooltipLabel = new JLabel();
     private final JWindow tooltipWindow;
 
+    public void showPrintPreview() {
+        PrinterJob job = PrinterJob.getPrinterJob();
+        job.setJobName("Печать карты");
+
+        job.setPrintable((graphics, pageFormat, pageIndex) -> {
+            if (pageIndex > 0) return Printable.NO_SUCH_PAGE;
+
+            Graphics2D g2 = (Graphics2D) graphics;
+            g2.translate(pageFormat.getImageableX(), pageFormat.getImageableY());
+            double scaleX = pageFormat.getImageableWidth() / getWidth();
+            double scaleY = pageFormat.getImageableHeight() / getHeight();
+            double printScale = Math.min(scaleX, scaleY);
+            g2.scale(printScale, printScale);
+
+            // рисуем всю панель на странице
+            paint(g2);
+
+            return Printable.PAGE_EXISTS;
+        });
+
+        if (job.printDialog()) { // Показываем диалог выбора принтера
+            try {
+                job.print();
+            } catch (PrinterException ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+
     public MapPanel() {
         setBackground(Color.WHITE);
         enableDrag();
         enableZoom();
 
-        // Тултип через JWindow
         tooltipWindow = new JWindow();
         tooltipWindow.add(tooltipLabel);
         tooltipLabel.setOpaque(true);
@@ -46,7 +75,7 @@ public class MapPanel extends JPanel {
                     double dx = e.getX() - screen.x;
                     double dy = e.getY() - screen.y;
                     double distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance <= 6) {
+                    if (distance <= 10) { // увеличил область срабатывания
                         tooltipLabel.setText("<html>ID: " + p.getId() +
                                 "<br>X: " + p.getX() +
                                 "<br>Y: " + p.getY() +
@@ -81,7 +110,7 @@ public class MapPanel extends JPanel {
             String line;
             boolean firstLine = true;
             while ((line = br.readLine()) != null) {
-                if (firstLine) { firstLine = false; continue; } // пропускаем заголовок
+                if (firstLine) { firstLine = false; continue; }
                 String[] parts = line.split(",");
                 if (parts.length >= 4) {
                     int id = Integer.parseInt(parts[0].trim());
@@ -116,7 +145,6 @@ public class MapPanel extends JPanel {
 
         scale = Math.min(panelWidth / (worldWidth * 1.1), panelHeight / (worldHeight * 1.1));
 
-        // offsetX/offsetY — координаты верхнего левого угла видимой области
         offsetX = minX - (panelWidth / scale - worldWidth) / 2;
         offsetY = minY - (panelHeight / scale - worldHeight) / 2;
     }
@@ -175,53 +203,47 @@ public class MapPanel extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-
         Graphics2D g2 = (Graphics2D) g;
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        // Фон
+        // фон
         g2.setColor(getBackground());
         g2.fillRect(0, 0, getWidth(), getHeight());
 
-        // Сетка
+        // сетка
         drawGrid(g2);
 
-        // Красные направляющие (оси)
+        // красные оси
         drawGuides(g2);
 
-        // Точки
+        // точки
         drawPoints(g2);
     }
 
     private void drawPoints(Graphics2D g) {
         g.setColor(Color.RED);
-        int size = Math.max(8, (int)(8 * scale)); // увеличиваем размер точек
+        int size = Math.max(8, (int)(12 * scale)); // масштабируем с zoom
         for (MapPoint p : points) {
             Point pt = worldToScreen(p.getX(), p.getY());
-            // рисуем только видимые точки
             if(pt.x < -size || pt.y < -size || pt.x > getWidth()+size || pt.y > getHeight()+size) continue;
             g.fillOval(pt.x - size/2, pt.y - size/2, size, size);
         }
     }
 
-    // --- Новая функция для красных осей ---
     private void drawGuides(Graphics2D g) {
-        double width = getWidth();
-        double height = getHeight();
+        int width = getWidth();
+        int height = getHeight();
 
         g.setColor(Color.RED);
         g.setStroke(new BasicStroke(Math.max(1f, (float)scale)));
 
-        // точка (0,0) в экранных координатах
-        Point origin = worldToScreen(0, 0);
+        Point origin = worldToScreen(0,0);
 
-        // ось X
-        g.drawLine(origin.x, 0, origin.x, (int)height);
+        g.drawLine(origin.x, 0, origin.x, height);
         g.drawString("+X →", origin.x + 5, 15);
         g.drawString("← -X", origin.x - 35, 15);
 
-        // ось Y
-        g.drawLine(0, origin.y, (int)width, origin.y);
+        g.drawLine(0, origin.y, width, origin.y);
         g.drawString("+Y ↓", 5, origin.y + 15);
         g.drawString("↑ -Y", 5, origin.y - 5);
     }
@@ -229,6 +251,7 @@ public class MapPanel extends JPanel {
     private void drawGrid(Graphics2D g) {
         g.setColor(Color.LIGHT_GRAY);
         int step = gridStep;
+
         double minX = offsetX;
         double minY = offsetY;
         double maxX = offsetX + getWidth()/scale;

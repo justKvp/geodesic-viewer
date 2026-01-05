@@ -34,8 +34,14 @@ public class MainApp {
                 }
             });
 
+            // --- Печать на принтер ---
+            JMenuItem printItem = new JMenuItem("Печать на принтер");
+            printItem.addActionListener(e -> map.showPrintPreview());
+
             file.add(open);
             file.add(png);
+            file.add(printItem);
+
             bar.add(file);
 
             frame.setJMenuBar(bar);
