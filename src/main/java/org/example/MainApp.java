@@ -27,7 +27,7 @@ public class MainApp extends Application {
         bottomPanel.setStyle("-fx-padding: 5; -fx-background-color: #ddd;");
         root.setBottom(bottomPanel);
 
-        // --- Тестовая кнопка: Сохранить скриншот ---
+        // --- Кнопка: Сохранить скриншот ---
         Button saveButton = new Button("Сохранить скриншот");
         saveButton.setOnAction(e -> {
             FileChooser fileChooser = new FileChooser();
@@ -40,7 +40,28 @@ public class MainApp extends Application {
                 canvas.saveToPNG(file);
             }
         });
-        bottomPanel.getChildren().add(saveButton);
+
+        // --- Кнопка: Печать карты ---
+        Button printButton = new Button("Печать карты");
+        printButton.setOnAction(e -> canvas.print());
+
+        // --- Кнопка: Загрузить другой CSV ---
+        Button loadCSVButton = new Button("Загрузить другой CSV");
+        loadCSVButton.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Выберите CSV карту");
+            fileChooser.getExtensionFilters().add(
+                    new FileChooser.ExtensionFilter("CSV файлы", "*.csv")
+            );
+            File csvFile = fileChooser.showOpenDialog(stage);
+            if (csvFile != null) {
+                canvas.loadPointsFromCSV(csvFile);
+                canvas.fitPointsToScreen();
+                canvas.draw();
+            }
+        });
+
+        bottomPanel.getChildren().addAll(saveButton, printButton, loadCSVButton);
 
         // --- Привязка размеров Canvas к центру окна, учитывая панель снизу ---
         canvas.widthProperty().bind(root.widthProperty());
@@ -57,7 +78,6 @@ public class MainApp extends Application {
 
         // --- Загрузка CSV через аргументы или FileChooser ---
         File csvFile = null;
-
         List<String> args = getParameters().getRaw();
         if (!args.isEmpty()) {
             File fileArg = new File(args.get(0));
