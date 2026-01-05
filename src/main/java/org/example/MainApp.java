@@ -23,57 +23,46 @@ public class MainApp {
             JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
             // --- Масштаб ---
-            controls.add(new JLabel("Масштаб 1 :"));
+            controls.add(new JLabel("Масштаб (1:X):"));
 
-            JTextField scaleField = new JTextField(6);
+            JTextField scaleField = new JTextField(8);
             controls.add(scaleField);
+            map.setScaleField(scaleField);
 
-            // обработчик Enter для установки масштаба
-            scaleField.addActionListener(e -> {
+            JButton applyScale = new JButton("Применить");
+            applyScale.addActionListener(e -> {
                 try {
                     double ratio = Double.parseDouble(scaleField.getText().trim());
-                    if (ratio > 0) {
-                        map.setScaleByRatio(ratio);
-                    }
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(frame, "Неверный масштаб!", "Ошибка", JOptionPane.ERROR_MESSAGE);
+                    // вычисляем scale в пикселях на метр (1 метр = ? пикселей)
+                    double pxPerMeter = map.getWidth() / ratio;
+                    map.setScaleManual(pxPerMeter);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(frame, "Неверный масштаб");
                 }
             });
-
-            // если zoom мышью, очищаем поле
-            map.addMouseWheelListener(e -> scaleField.setText(""));
+            controls.add(applyScale);
 
             controls.add(new JSeparator(SwingConstants.VERTICAL));
 
-            // ===== Инструменты линий =====
-            JButton lineSolidBlue = new JButton("Линия (синяя)");
-            JButton lineSolidBlack = new JButton("Линия (черная)");
-            JButton lineSolidGreen = new JButton("Линия (зеленая)");
-            JButton lineDashedRed = new JButton("Пунктир (красная)");
-
+            // --- Инструменты линий ---
+            JButton lineBlue = new JButton("Линия (синяя)");
+            JButton lineRedDashed = new JButton("Пунктир (красный)");
+            JButton lineGreen = new JButton("Линия (зелёная)");
+            JButton lineBlack = new JButton("Линия (чёрная)");
             JButton finishLine = new JButton("Завершить линию");
             JButton clearLines = new JButton("Очистить линии");
 
-            lineSolidBlue.addActionListener(e ->
-                    map.startLineDrawing(Color.BLUE, MapLine.LineStyle.SOLID)
-            );
-            lineSolidBlack.addActionListener(e ->
-                    map.startLineDrawing(Color.BLACK, MapLine.LineStyle.SOLID)
-            );
-            lineSolidGreen.addActionListener(e ->
-                    map.startLineDrawing(Color.GREEN, MapLine.LineStyle.SOLID)
-            );
-            lineDashedRed.addActionListener(e ->
-                    map.startLineDrawing(Color.RED, MapLine.LineStyle.DASHED)
-            );
-
+            lineBlue.addActionListener(e -> map.startLineDrawing(Color.BLUE, MapLine.LineStyle.SOLID));
+            lineRedDashed.addActionListener(e -> map.startLineDrawing(Color.RED, MapLine.LineStyle.DASHED));
+            lineGreen.addActionListener(e -> map.startLineDrawing(Color.GREEN, MapLine.LineStyle.SOLID));
+            lineBlack.addActionListener(e -> map.startLineDrawing(Color.BLACK, MapLine.LineStyle.SOLID));
             finishLine.addActionListener(e -> map.finishLineDrawing());
             clearLines.addActionListener(e -> map.clearLines());
 
-            controls.add(lineSolidBlue);
-            controls.add(lineSolidBlack);
-            controls.add(lineSolidGreen);
-            controls.add(lineDashedRed);
+            controls.add(lineBlue);
+            controls.add(lineRedDashed);
+            controls.add(lineGreen);
+            controls.add(lineBlack);
             controls.add(finishLine);
             controls.add(clearLines);
 
@@ -81,17 +70,16 @@ public class MainApp {
             JMenuBar bar = new JMenuBar();
             JMenu file = new JMenu("Файл");
 
-            JMenuItem open = new JMenuItem("Открыть CSV");
+            JMenuItem open = new JMenuItem("Открыть CSV/TXT");
             open.addActionListener(e -> {
                 JFileChooser fc = new JFileChooser();
                 if (fc.showOpenDialog(frame) == JFileChooser.APPROVE_OPTION) {
                     File fileToLoad = fc.getSelectedFile();
-
                     SwingWorker<Void, Void> worker = new SwingWorker<>() {
                         @Override
                         protected Void doInBackground() {
                             map.setLoading(true);
-                            map.loadPointsFromCSV(fileToLoad);
+                            map.loadPointsFromFile(fileToLoad); // метод loadPointsFromFile реализован в MapPanel
                             return null;
                         }
 
@@ -104,8 +92,8 @@ public class MainApp {
                 }
             });
 
-            JMenuItem png = new JMenuItem("Сохранить PNG");
-            png.addActionListener(e -> {
+            JMenuItem savePNG = new JMenuItem("Сохранить PNG");
+            savePNG.addActionListener(e -> {
                 JFileChooser fc = new JFileChooser();
                 if (fc.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {
                     map.saveToPNG(fc.getSelectedFile());
@@ -116,10 +104,9 @@ public class MainApp {
             printItem.addActionListener(e -> map.showPrintPreview());
 
             file.add(open);
-            file.add(png);
+            file.add(savePNG);
             file.add(printItem);
             bar.add(file);
-
             frame.setJMenuBar(bar);
 
             // ===== Компоновка =====
@@ -130,7 +117,7 @@ public class MainApp {
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
 
-            // ===== Тестовые данные =====
+            // ===== Тестовые точки =====
             map.loadTestPoints();
         });
     }

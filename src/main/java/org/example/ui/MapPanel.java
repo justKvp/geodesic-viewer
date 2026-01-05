@@ -14,100 +14,78 @@ import java.util.List;
 
 public class MapPanel extends JPanel {
 
-    private double scale = 1.0;
+    private double scale = 1.0; // пиксели на метр
     private double offsetX = 0;
     private double offsetY = 0;
 
     private double lastMouseX;
     private double lastMouseY;
 
-    private final int gridStep = 100;
     private final List<MapPoint> points = new ArrayList<>();
+    private final List<MapLine> lines = new ArrayList<>();
+
+    private MapLine currentLine = null;
+    private boolean lineDrawingMode = false;
+
+    private volatile boolean loading = false;
+
+    private JTextField scaleField;
 
     private final JLabel tooltipLabel = new JLabel();
     private final JWindow tooltipWindow;
 
-    private volatile boolean loading = false;
-
-    // ===== ЛИНИИ =====
-    private final List<MapLine> lines = new ArrayList<>();
-    private MapLine currentLine = null;
-    private boolean lineDrawingMode = false;
-
-    public void setScaleByRatio(double ratio) {
-        if (ratio <= 0) return;
-
-        // центр экрана в мировых координатах
-        double centerWorldX = offsetX + getWidth() / (2 * scale);
-        double centerWorldY = offsetY + getHeight() / (2 * scale);
-
-        // масштаб 1 : N
-        scale = 1.0 / ratio;
-
-        // пересчитываем смещение, чтобы центр остался на месте
-        offsetX = centerWorldX - getWidth() / (2 * scale);
-        offsetY = centerWorldY - getHeight() / (2 * scale);
-
-        repaint();
-    }
-
     public MapPanel() {
         setBackground(Color.WHITE);
+
         enableDrag();
         enableZoom();
 
-        // tooltip
         tooltipWindow = new JWindow();
         tooltipWindow.add(tooltipLabel);
         tooltipLabel.setOpaque(true);
         tooltipLabel.setBackground(new Color(255, 255, 200));
         tooltipLabel.setBorder(BorderFactory.createLineBorder(Color.BLACK));
 
-        // hover tooltip
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                boolean onPoint = false;
-                for (MapPoint p : points) {
-                    Point screen = worldToScreen(p.getX(), p.getY());
-                    if (screen.distance(e.getPoint()) <= 10) {
-                        tooltipLabel.setText(
-                                "<html>ID: " + p.getId() +
-                                        "<br>X: " + p.getX() +
-                                        "<br>Y: " + p.getY() +
-                                        "<br>Z: " + p.getZ() +
-                                        "<br>" + p.getComment() + "</html>"
-                        );
-                        tooltipWindow.setLocation(
-                                e.getXOnScreen() + 10,
-                                e.getYOnScreen() + 10
-                        );
-                        tooltipWindow.pack();
-                        tooltipWindow.setVisible(true);
-                        onPoint = true;
-                        break;
-                    }
-                }
-                if (!onPoint) tooltipWindow.setVisible(false);
+                updateTooltip(e);
             }
         });
 
-        // клики для линий
         addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                if (!lineDrawingMode || currentLine == null) return;
+            public void mousePressed(MouseEvent e) {
+                lastMouseX = e.getX();
+                lastMouseY = e.getY();
 
-                MapPoint p = findPointNear(e);
-                if (p != null) {
-                    currentLine.addPoint(p);
-                    repaint();
+                if (lineDrawingMode && currentLine != null) {
+                    MapPoint p = findPointNear(e);
+                    if (p != null) {
+                        currentLine.addPoint(p);
+                        repaint();
+                    }
                 }
             }
         });
     }
 
-    // ================= API =================
+    public void setScaleField(JTextField field) {
+        this.scaleField = field;
+    }
+
+    public void setScaleManual(double pxPerMeter) {
+        this.scale = pxPerMeter;
+        if (scaleField != null) {
+            scaleField.setText(String.format("%.0f", 1.0 / scale * getWidth()));
+        }
+        repaint();
+    }
+
+    public void setLoading(boolean loading) {
+        this.loading = loading;
+        repaint();
+    }
 
     public void startLineDrawing(Color color, MapLine.LineStyle style) {
         currentLine = new MapLine(color, style);
@@ -126,44 +104,43 @@ public class MapPanel extends JPanel {
         repaint();
     }
 
-    public void setLoading(boolean loading) {
-        this.loading = loading;
-        repaint();
+    private MapPoint findPointNear(MouseEvent e) {
+        for (MapPoint p : points) {
+            Point pt = worldToScreen(p.getX(), p.getY());
+            if (pt.distance(e.getX(), e.getY()) <= 10) return p;
+        }
+        return null;
     }
-
-    // ================= POINTS =================
 
     public void loadTestPoints() {
         points.clear();
         points.addAll(List.of(
-                new MapPoint(10000, 100, 50, 1, "Начало"),
-                new MapPoint(4000, 300, 20, 2, "Точка интереса"),
-                new MapPoint(8000, 600, 70, 3, "Метка 3"),
-                new MapPoint(12000, 900, 90, 4, "Последняя"),
-                new MapPoint(-500, 200, 10, 5, "Отрицательная X"),
-                new MapPoint(600, -300, 30, 6, "Отрицательная Y"),
-                new MapPoint(-200, -150, 60, 7, "Отрицательные X и Y")
+                new MapPoint(0, 0, 50, 1, "Начало"),
+                new MapPoint(1000, 500, 30, 2, "Точка 2"),
+                new MapPoint(2000, 1500, 70, 3, "Точка 3"),
+                new MapPoint(5000, 2000, 90, 4, "Точка 4")
         ));
         fitPointsToScreen();
         repaint();
     }
 
-    public void loadPointsFromCSV(File csvFile) {
+    public void loadPointsFromFile(File file) {
         List<MapPoint> loaded = new ArrayList<>();
-        try (BufferedReader br = new BufferedReader(new FileReader(csvFile))) {
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             String line;
-            boolean first = true;
             while ((line = br.readLine()) != null) {
-                if (first) { first = false; continue; }
-                String[] p = line.split(",");
-                if (p.length >= 5) {
-                    loaded.add(new MapPoint(
-                            Double.parseDouble(p[1].trim()),
-                            Double.parseDouble(p[2].trim()),
-                            Double.parseDouble(p[3].trim()),
-                            Integer.parseInt(p[0].trim()),
-                            p[4].trim()
-                    ));
+                String[] p;
+                if (line.contains("\t")) p = line.split("\t");
+                else if (line.contains(";")) p = line.split(";");
+                else p = line.split("\\s+");
+
+                if (p.length >= 4) {
+                    int id = Integer.parseInt(p[0].trim());
+                    double x = Double.parseDouble(p[1].trim());
+                    double y = Double.parseDouble(p[2].trim());
+                    double z = Double.parseDouble(p[3].trim());
+                    String comment = p.length >= 5 ? p[4].trim() : "";
+                    loaded.add(new MapPoint(x, y, z, id, comment));
                 }
             }
         } catch (Exception e) {
@@ -175,115 +152,47 @@ public class MapPanel extends JPanel {
         repaint();
     }
 
-    // ================= DRAW =================
+    public void fitPointsToScreen() {
+        if (points.isEmpty()) return;
+        double minX = points.stream().mapToDouble(MapPoint::getX).min().orElse(0);
+        double maxX = points.stream().mapToDouble(MapPoint::getX).max().orElse(0);
+        double minY = points.stream().mapToDouble(MapPoint::getY).min().orElse(0);
+        double maxY = points.stream().mapToDouble(MapPoint::getY).max().orElse(0);
 
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        Graphics2D g2 = (Graphics2D) g;
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        double panelWidth = getWidth() > 0 ? getWidth() : 1000;
+        double panelHeight = getHeight() > 0 ? getHeight() : 700;
 
-        drawGrid(g2);
-        drawGuides(g2);
-        drawLines(g2);
-        drawPoints(g2);
+        double worldWidth = maxX - minX;
+        double worldHeight = maxY - minY;
 
-        if (loading) {
-            g2.setColor(new Color(0, 0, 0, 120));
-            g2.fillRect(0, 0, getWidth(), getHeight());
-            g2.setColor(Color.WHITE);
-            g2.setFont(new Font("Arial", Font.BOLD, 24));
-            g2.drawString("Загрузка...", getWidth() / 2 - 70, getHeight() / 2);
-        }
+        scale = Math.min(panelWidth / (worldWidth * 1.1), panelHeight / (worldHeight * 1.1));
+
+        offsetX = minX - (panelWidth / scale - worldWidth) / 2;
+        offsetY = minY - (panelHeight / scale - worldHeight) / 2;
     }
 
-    private void drawLines(Graphics2D g) {
-        for (MapLine line : lines) {
-            if (line.getPoints().size() < 2) continue;
-
-            Stroke stroke = line.getStyle() == MapLine.LineStyle.DASHED
-                    ? new BasicStroke(Math.max(1f, (float) (2 * scale)),
-                    BasicStroke.CAP_ROUND,
-                    BasicStroke.JOIN_ROUND,
-                    0,
-                    new float[]{10f, 10f},
-                    0)
-                    : new BasicStroke(Math.max(1f, (float) (2 * scale)));
-
-            g.setStroke(stroke);
-            g.setColor(line.getColor());
-
-            List<MapPoint> pts = line.getPoints();
-            Point prev = worldToScreen(pts.get(0).getX(), pts.get(0).getY());
-
-            for (int i = 1; i < pts.size(); i++) {
-                Point curr = worldToScreen(pts.get(i).getX(), pts.get(i).getY());
-                g.drawLine(prev.x, prev.y, curr.x, curr.y);
-                prev = curr;
-            }
-        }
-    }
-
-    private void drawPoints(Graphics2D g) {
-        int size = Math.max(8, (int) (8 * scale));
-
-        double avgZ = points.stream().mapToDouble(MapPoint::getZ).average().orElse(0);
-        double maxZ = points.stream().mapToDouble(MapPoint::getZ).max().orElse(avgZ);
-        double minZ = points.stream().mapToDouble(MapPoint::getZ).min().orElse(avgZ);
-
-        for (MapPoint p : points) {
-            Point pt = worldToScreen(p.getX(), p.getY());
-
-            Color c;
-            if (p.getZ() > avgZ) {
-                float r = (float) ((p.getZ() - avgZ) / (maxZ - avgZ + 0.0001));
-                c = new Color(0f, 0.5f + 0.5f * r, 0f);
-            } else if (p.getZ() < avgZ) {
-                float r = (float) ((avgZ - p.getZ()) / (avgZ - minZ + 0.0001));
-                c = new Color(0f, 0f, 1f - 0.5f * r);
-            } else {
-                c = Color.GRAY;
-            }
-
-            g.setColor(c);
-            g.fillOval(pt.x - size / 2, pt.y - size / 2, size, size);
-
-            g.setColor(Color.BLACK);
-            g.drawString(String.valueOf(p.getId()), pt.x + size / 2 + 2, pt.y - size / 2 - 2);
-        }
-    }
-
-    // ================= HELPERS =================
-
-    private MapPoint findPointNear(MouseEvent e) {
-        for (MapPoint p : points) {
-            if (worldToScreen(p.getX(), p.getY()).distance(e.getPoint()) <= 10) {
-                return p;
-            }
-        }
-        return null;
+    public void saveToPNG(File file) {
+        BufferedImage image = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
+        paint(image.getGraphics());
+        try {
+            javax.imageio.ImageIO.write(image, "png", file);
+        } catch (IOException e) { e.printStackTrace(); }
     }
 
     private Point worldToScreen(double x, double y) {
-        return new Point(
-                (int) ((x - offsetX) * scale),
-                (int) ((y - offsetY) * scale)
-        );
+        int sx = (int) ((x - offsetX) * scale);
+        int sy = (int) ((y - offsetY) * scale);
+        return new Point(sx, sy);
     }
 
     private void enableDrag() {
-        addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                lastMouseX = e.getX();
-                lastMouseY = e.getY();
-            }
-        });
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseDragged(MouseEvent e) {
-                offsetX -= (e.getX() - lastMouseX) / scale;
-                offsetY -= (e.getY() - lastMouseY) / scale;
+                double dx = (e.getX() - lastMouseX) / scale;
+                double dy = (e.getY() - lastMouseY) / scale;
+                offsetX -= dx;
+                offsetY -= dy;
                 lastMouseX = e.getX();
                 lastMouseY = e.getY();
                 repaint();
@@ -293,95 +202,169 @@ public class MapPanel extends JPanel {
 
     private void enableZoom() {
         addMouseWheelListener(e -> {
-            double factor = Math.pow(1.1, -e.getWheelRotation());
-            double wx = e.getX() / scale + offsetX;
-            double wy = e.getY() / scale + offsetY;
+            double zoomFactor = Math.pow(1.1, -e.getWheelRotation());
+            double mouseX = e.getX() / scale + offsetX;
+            double mouseY = e.getY() / scale + offsetY;
 
-            scale *= factor;
-            offsetX = wx - e.getX() / scale;
-            offsetY = wy - e.getY() / scale;
+            scale *= zoomFactor;
+            offsetX = mouseX - e.getX() / scale;
+            offsetY = mouseY - e.getY() / scale;
+
+            if (scaleField != null) scaleField.setText("");
+
             repaint();
         });
     }
 
-    private void drawGuides(Graphics2D g) {
-        Point o = worldToScreen(0, 0);
-        g.setColor(Color.RED);
-        g.drawLine(o.x, 0, o.x, getHeight());
-        g.drawLine(0, o.y, getWidth(), o.y);
+    private void updateTooltip(MouseEvent e) {
+        boolean onPoint = false;
+        for (MapPoint p : points) {
+            Point screen = worldToScreen(p.getX(), p.getY());
+            if (screen.distance(e.getX(), e.getY()) <= 10) {
+                tooltipLabel.setText("<html>ID: " + p.getId() +
+                        "<br>X: " + p.getX() +
+                        "<br>Y: " + p.getY() +
+                        "<br>Z: " + p.getZ() +
+                        "<br>Комментарий: " + p.getComment() + "</html>");
+                tooltipWindow.setLocation(e.getXOnScreen() + 10, e.getYOnScreen() + 10);
+                tooltipWindow.pack();
+                tooltipWindow.setVisible(true);
+                onPoint = true;
+                break;
+            }
+        }
+        if (!onPoint) tooltipWindow.setVisible(false);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        Graphics2D g2 = (Graphics2D) g;
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        g2.setColor(getBackground());
+        g2.fillRect(0, 0, getWidth(), getHeight());
+
+        drawGrid(g2);
+        drawGuides(g2);
+        drawPoints(g2);
+        drawLines(g2);
+
+        if (loading) {
+            g2.setColor(new Color(0, 0, 0, 120));
+            g2.fillRect(0, 0, getWidth(), getHeight());
+            g2.setColor(Color.WHITE);
+            g2.setFont(new Font("Arial", Font.BOLD, 24));
+            String text = "Загрузка...";
+            FontMetrics fm = g2.getFontMetrics();
+            int x = (getWidth() - fm.stringWidth(text)) / 2;
+            int y = (getHeight() + fm.getAscent()) / 2;
+            g2.drawString(text, x, y);
+        }
+    }
+
+    private void drawPoints(Graphics2D g) {
+        int baseSize = 8;
+        int size = Math.max(baseSize, (int)(baseSize * scale));
+        g.setFont(new Font("Arial", Font.PLAIN, Math.max(10, (int)(10 * scale))));
+
+        double avgZ = points.stream().mapToDouble(MapPoint::getZ).average().orElse(0);
+        double maxZ = points.stream().mapToDouble(MapPoint::getZ).max().orElse(avgZ);
+        double minZ = points.stream().mapToDouble(MapPoint::getZ).min().orElse(avgZ);
+
+        for (MapPoint p : points) {
+            Point pt = worldToScreen(p.getX(), p.getY());
+            if (pt.x < -size || pt.y < -size || pt.x > getWidth() + size || pt.y > getHeight() + size)
+                continue;
+
+            Color pointColor;
+            if (p.getZ() > avgZ) {
+                float ratio = (float) ((p.getZ() - avgZ) / (maxZ - avgZ + 0.0001));
+                pointColor = new Color(0f, 0.5f + 0.5f * ratio, 0f);
+            } else if (p.getZ() < avgZ) {
+                float ratio = (float) ((avgZ - p.getZ()) / (avgZ - minZ + 0.0001));
+                pointColor = new Color(0f, 0f, 0.5f + 0.5f * (1 - ratio));
+            } else {
+                pointColor = Color.GRAY;
+            }
+
+            g.setColor(pointColor);
+            g.fillOval(pt.x - size / 2, pt.y - size / 2, size, size);
+
+            g.setColor(Color.BLACK);
+            g.drawString(String.valueOf(p.getId()), pt.x + size / 2 + 2, pt.y - size / 2 - 2);
+        }
+    }
+
+    private void drawLines(Graphics2D g) {
+        for (MapLine line : lines) {
+            g.setColor(line.getColor());
+            if (line.getStyle() == MapLine.LineStyle.DASHED)
+                g.setStroke(new BasicStroke(2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{10}, 0));
+            else
+                g.setStroke(new BasicStroke(2f));
+
+            List<MapPoint> pts = line.getPoints();
+            for (int i = 0; i < pts.size() - 1; i++) {
+                Point a = worldToScreen(pts.get(i).getX(), pts.get(i).getY());
+                Point b = worldToScreen(pts.get(i + 1).getX(), pts.get(i + 1).getY());
+                g.drawLine(a.x, a.y, b.x, b.y);
+            }
+        }
     }
 
     private void drawGrid(Graphics2D g) {
         g.setColor(Color.LIGHT_GRAY);
-        int step = gridStep;
-
-        while (step * scale < 50) step *= 2;
-
+        int step = 100;
         double minX = offsetX;
-        double maxX = offsetX + getWidth() / scale;
         double minY = offsetY;
-        double maxY = offsetY + getHeight() / scale;
+        double maxX = offsetX + getWidth()/scale;
+        double maxY = offsetY + getHeight()/scale;
+        while (step*scale < 50) step *= 2;
 
-        for (double x = Math.floor(minX / step) * step; x <= maxX; x += step) {
-            int sx = (int) ((x - offsetX) * scale);
-            g.drawLine(sx, 0, sx, getHeight());
-            g.drawString(String.valueOf((int) x), sx + 2, 12);
+        g.setFont(new Font("Arial", Font.PLAIN, 10));
+        for(double x = Math.floor(minX/step)*step; x <= Math.ceil(maxX/step)*step; x+=step){
+            int sx = (int)((x - offsetX)*scale);
+            g.drawLine(sx,0,sx,getHeight());
+            g.drawString(String.valueOf((int)x), sx+2, 12);
         }
+        for(double y = Math.floor(minY/step)*step; y <= Math.ceil(maxY/step)*step; y+=step){
+            int sy = (int)((y - offsetY)*scale);
+            g.drawLine(0,sy,getWidth(),sy);
+            g.drawString(String.valueOf((int)y), 2, sy-2);
+        }
+    }
 
-        for (double y = Math.floor(minY / step) * step; y <= maxY; y += step) {
-            int sy = (int) ((y - offsetY) * scale);
-            g.drawLine(0, sy, getWidth(), sy);
-            g.drawString(String.valueOf((int) y), 2, sy - 2);
-        }
+    private void drawGuides(Graphics2D g) {
+        int width = getWidth();
+        int height = getHeight();
+        g.setColor(Color.RED);
+        g.setStroke(new BasicStroke(Math.max(1f, (float)scale)));
+        Point origin = worldToScreen(0,0);
+        g.drawLine(origin.x, 0, origin.x, height);
+        g.drawString("+X →", origin.x + 5, 15);
+        g.drawString("← -X", origin.x - 35, 15);
+        g.drawLine(0, origin.y, width, origin.y);
+        g.drawString("+Y ↓", 5, origin.y + 15);
+        g.drawString("↑ -Y", 5, origin.y - 5);
     }
 
     public void showPrintPreview() {
         PrinterJob job = PrinterJob.getPrinterJob();
-        job.setPrintable((g, pf, pi) -> {
-            if (pi > 0) return Printable.NO_SUCH_PAGE;
-            Graphics2D g2 = (Graphics2D) g;
-            g2.translate(pf.getImageableX(), pf.getImageableY());
-            double s = Math.min(
-                    pf.getImageableWidth() / getWidth(),
-                    pf.getImageableHeight() / getHeight()
-            );
-            g2.scale(s, s);
+        job.setJobName("Печать карты");
+        job.setPrintable((graphics, pageFormat, pageIndex) -> {
+            if (pageIndex > 0) return Printable.NO_SUCH_PAGE;
+            Graphics2D g2 = (Graphics2D) graphics;
+            g2.translate(pageFormat.getImageableX(), pageFormat.getImageableY());
+            double scaleX = pageFormat.getImageableWidth() / getWidth();
+            double scaleY = pageFormat.getImageableHeight() / getHeight();
+            double printScale = Math.min(scaleX, scaleY);
+            g2.scale(printScale, printScale);
             paint(g2);
             return Printable.PAGE_EXISTS;
         });
-
         if (job.printDialog()) {
-            try { job.print(); } catch (PrinterException e) { e.printStackTrace(); }
-        }
-    }
-
-    private void fitPointsToScreen() {
-        if (points.isEmpty()) return;
-
-        double minX = points.stream().mapToDouble(MapPoint::getX).min().orElse(0);
-        double maxX = points.stream().mapToDouble(MapPoint::getX).max().orElse(0);
-        double minY = points.stream().mapToDouble(MapPoint::getY).min().orElse(0);
-        double maxY = points.stream().mapToDouble(MapPoint::getY).max().orElse(0);
-
-        double w = getWidth() > 0 ? getWidth() : 1000;
-        double h = getHeight() > 0 ? getHeight() : 700;
-
-        scale = Math.min(
-                w / ((maxX - minX) * 1.1),
-                h / ((maxY - minY) * 1.1)
-        );
-
-        offsetX = minX - (w / scale - (maxX - minX)) / 2;
-        offsetY = minY - (h / scale - (maxY - minY)) / 2;
-    }
-
-    public void saveToPNG(File file) {
-        BufferedImage img = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
-        paint(img.getGraphics());
-        try {
-            javax.imageio.ImageIO.write(img, "png", file);
-        } catch (IOException e) {
-            e.printStackTrace();
+            try { job.print(); } catch (PrinterException ex) { ex.printStackTrace(); }
         }
     }
 }
