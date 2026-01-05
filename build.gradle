@@ -7,6 +7,8 @@ repositories {
     mavenCentral()
 }
 
+version = "1.0.0"
+
 // JavaFX версия
 def javafxVersion = "21.0.2"
 
@@ -14,43 +16,75 @@ dependencies {
     implementation "org.openjfx:javafx-base:${javafxVersion}"
     implementation "org.openjfx:javafx-controls:${javafxVersion}"
     implementation "org.openjfx:javafx-graphics:${javafxVersion}"
-    implementation "org.openjfx:javafx-swing:${javafxVersion}"  // <-- для SwingFXUtils
+    implementation "org.openjfx:javafx-swing:${javafxVersion}"  // для SwingFXUtils
 }
 
 javafx {
     version = javafxVersion
-    modules = [ 'javafx.controls', 'javafx.graphics', 'javafx.swing' ]
+    modules = ['javafx.controls', 'javafx.graphics', 'javafx.swing']
 }
 
 application {
-    // Пакет + класс с main()
     mainClass = 'org.example.MainApp'
 }
 
 // Настройка Java для jpackage
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21) // Можно указать JDK, который установлен
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
-// jpackage task (для Linux/Windows/Mac)
+// jpackage task
 tasks.register("packageApp", Exec) {
     group = "distribution"
     description = "Builds a standalone application using jpackage"
 
     dependsOn(tasks.jar)
 
-    def javafxLibPath = System.getenv("JAVA_FX_SDK") ?: "/path/to/javafx-sdk-21.0.2/lib"
+    def javafxLibPath = System.getenv("JAVA_FX_SDK") ?: "/home/at/javafx-sdk-21.0.9/lib"
+    def jpackagePath = "/home/at/.sdkman/candidates/java/current/bin/jpackage"
+    def jarFile = file("build/libs/${rootProject.name}-${version}.jar")
+
+    if (!jarFile.exists()) {
+        throw new GradleException("Main JAR not found: ${jarFile}")
+    }
 
     commandLine = [
-            "jpackage",
+            jpackagePath,
             "--input", "build/libs",
-            "--name", "MapDemo",
-            "--main-jar", "mapdemo.jar",
-            "--main-class", "mapdemo.MainApp",
-            "--type", "app-image",
+            "--name", rootProject.name,
+            "--main-jar", jarFile.name,
+            "--main-class", application.mainClass.get(),
+            "--type", "app-image",  // на Linux
             "--module-path", javafxLibPath,
-            "--add-modules", "javafx.controls,javafx.graphics"
+            "--add-modules", "javafx.controls,javafx.graphics,javafx.swing"
     ]
+}
+
+
+// ------------------- fatJar -------------------
+tasks.register('fatJar', Jar) {
+    group = 'build'
+    description = 'Создать fat JAR со всеми зависимостями'
+
+    archiveBaseName.set(rootProject.name)  // имя из rootProject
+    archiveVersion.set(version)
+    archiveClassifier.set('')
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes(
+                'Main-Class': application.mainClass.get()
+        )
+    }
+
+    // Классы приложения
+    from(sourceSets.main.output)
+
+    // Все зависимости
+    from({
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    })
 }
