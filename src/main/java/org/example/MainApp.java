@@ -2,7 +2,9 @@ package org.example;
 
 import javafx.application.Application;
 import javafx.scene.Scene;
-import javafx.scene.layout.StackPane;
+import javafx.scene.control.Button;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import org.example.ui.MapCanvas;
@@ -14,13 +16,37 @@ public class MainApp extends Application {
 
     @Override
     public void start(Stage stage) {
-        StackPane root = new StackPane();
-        MapCanvas canvas = new MapCanvas(800, 600);
-        root.getChildren().add(canvas);
+        BorderPane root = new BorderPane();
 
-        // Привязка размеров Canvas к окну
+        // --- Canvas ---
+        MapCanvas canvas = new MapCanvas(800, 600);
+        root.setCenter(canvas);
+
+        // --- Панель под кнопки ---
+        HBox bottomPanel = new HBox(10);
+        bottomPanel.setStyle("-fx-padding: 5; -fx-background-color: #ddd;");
+        root.setBottom(bottomPanel);
+
+        // --- Тестовая кнопка: Сохранить скриншот ---
+        Button saveButton = new Button("Сохранить скриншот");
+        saveButton.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Сохранить карту как PNG");
+            fileChooser.getExtensionFilters().add(
+                    new FileChooser.ExtensionFilter("PNG файлы", "*.png")
+            );
+            File file = fileChooser.showSaveDialog(stage);
+            if (file != null) {
+                canvas.saveToPNG(file);
+            }
+        });
+        bottomPanel.getChildren().add(saveButton);
+
+        // --- Привязка размеров Canvas к центру окна, учитывая панель снизу ---
         canvas.widthProperty().bind(root.widthProperty());
-        canvas.heightProperty().bind(root.heightProperty());
+        canvas.heightProperty().bind(root.heightProperty().subtract(bottomPanel.heightProperty()));
+
+        // --- Redraw при изменении размеров ---
         canvas.widthProperty().addListener((obs, oldVal, newVal) -> canvas.draw());
         canvas.heightProperty().addListener((obs, oldVal, newVal) -> canvas.draw());
 
@@ -29,9 +55,9 @@ public class MainApp extends Application {
         stage.setTitle("Map Demo");
         stage.show();
 
+        // --- Загрузка CSV через аргументы или FileChooser ---
         File csvFile = null;
 
-        // --- 1️⃣ Проверка аргументов командной строки ---
         List<String> args = getParameters().getRaw();
         if (!args.isEmpty()) {
             File fileArg = new File(args.get(0));
@@ -42,7 +68,6 @@ public class MainApp extends Application {
             }
         }
 
-        // --- 2️⃣ Если аргументов нет или файл не найден — FileChooser ---
         if (csvFile == null) {
             FileChooser fileChooser = new FileChooser();
             fileChooser.setTitle("Выберите CSV карту");
@@ -52,14 +77,13 @@ public class MainApp extends Application {
             csvFile = fileChooser.showOpenDialog(stage);
         }
 
-        // --- Загружаем точки ---
         if (csvFile != null) {
             canvas.loadPointsFromCSV(csvFile);
         } else {
-            canvas.loadTestPoints(); // если пользователь отменил выбор
+            canvas.loadTestPoints();
         }
 
-        // автоцентр и авто-отдаление
+        // --- Центрирование и авто-отдаление ---
         canvas.fitPointsToScreen();
         canvas.draw();
     }
