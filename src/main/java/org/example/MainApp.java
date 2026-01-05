@@ -43,7 +43,7 @@ public class MainApp extends Application {
 
         // --- Кнопка: Печать карты ---
         Button printButton = new Button("Печать карты");
-        printButton.setOnAction(e -> canvas.print());
+        printButton.setOnAction(e -> canvas.showPrintPreview());
 
         // --- Кнопка: Загрузить другой CSV ---
         Button loadCSVButton = new Button("Загрузить другой CSV");

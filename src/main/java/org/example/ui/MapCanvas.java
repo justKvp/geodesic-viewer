@@ -1,16 +1,22 @@
 package org.example.ui;
 
+import javafx.geometry.Insets;
 import javafx.geometry.Point2D;
+import javafx.scene.Scene;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.Button;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 import org.example.model.MapPoint;
 
 import javafx.embed.swing.SwingFXUtils;
@@ -75,14 +81,49 @@ public class MapCanvas extends Canvas {
         }
     }
 
-    // Метод для печати
-    public void printCanvas() {
-        PrinterJob job = PrinterJob.createPrinterJob();
-        if (job != null && job.showPrintDialog(getScene().getWindow())) {
-            this.snapshot(null, null); // обновляем изображение
-            job.printPage(this);
-            job.endJob();
-        }
+    // --- Сохранение в PNG ---
+    public void saveToPNG(File file) {
+        try {
+            var image = new javafx.scene.image.WritableImage((int)getWidth(), (int)getHeight());
+            snapshot(null, image);
+            ImageIO.write(SwingFXUtils.fromFXImage(image, null), "png", file);
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    public void showPrintPreview() {
+        Stage previewStage = new Stage();
+        BorderPane previewRoot = new BorderPane();
+
+        // Копия Canvas для превью
+        Canvas previewCanvas = new Canvas(getWidth(), getHeight());
+        GraphicsContext g = previewCanvas.getGraphicsContext2D();
+        g.drawImage(this.snapshot(null, null), 0, 0, getWidth(), getHeight());
+
+        previewRoot.setCenter(previewCanvas);
+
+        // Кнопки
+        Button btnPrint = new Button("Печать");
+        Button btnCancel = new Button("Отмена");
+        HBox controls = new HBox(10, btnPrint, btnCancel);
+        controls.setPadding(new Insets(5));
+        previewRoot.setBottom(controls);
+
+        Scene scene = new Scene(previewRoot, getWidth(), getHeight() + 50);
+        previewStage.setScene(scene);
+        previewStage.setTitle("Предварительный просмотр печати");
+
+        // Действия кнопок
+        btnPrint.setOnAction(e -> {
+            PrinterJob job = PrinterJob.createPrinterJob();
+            if (job != null && job.showPrintDialog(previewStage)) {
+                job.printPage(this);
+                job.endJob();
+                previewStage.close();
+            }
+        });
+        btnCancel.setOnAction(e -> previewStage.close());
+
+        previewStage.show();
     }
 
     /** Загрузка точек из CSV */
@@ -277,20 +318,5 @@ public class MapCanvas extends Canvas {
         });
     }
 
-    // --- Сохранение в PNG ---
-    public void saveToPNG(File file) {
-        try {
-            var image = new javafx.scene.image.WritableImage((int)getWidth(), (int)getHeight());
-            snapshot(null, image);
-            ImageIO.write(SwingFXUtils.fromFXImage(image, null), "png", file);
-        } catch (Exception e) { e.printStackTrace(); }
-    }
 
-    // --- Печать ---
-    public void print() {
-        PrinterJob job = PrinterJob.createPrinterJob();
-        if (job != null && job.showPrintDialog(getScene().getWindow())) {
-            if (job.printPage(this)) job.endJob();
-        }
-    }
 }
