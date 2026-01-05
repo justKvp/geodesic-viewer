@@ -404,4 +404,162 @@ public class MapPanel extends JPanel {
             try { job.print(); } catch (PrinterException ex) { ex.printStackTrace(); }
         }
     }
+
+    /**
+     * Сохраняет текущие точки и линии в DXF файл с подписями и стилями линий
+     */
+    public void saveToDXF(File file) {
+        try (PrintWriter dxf = new PrintWriter(new FileWriter(file))) {
+            // --- Заголовок DXF ---
+            dxf.println("0");
+            dxf.println("SECTION");
+            dxf.println("2");
+            dxf.println("HEADER");
+            dxf.println("0");
+            dxf.println("ENDSEC");
+
+            dxf.println("0");
+            dxf.println("SECTION");
+            dxf.println("2");
+            dxf.println("TABLES");
+            dxf.println("0");
+            dxf.println("ENDSEC");
+
+            dxf.println("0");
+            dxf.println("SECTION");
+            dxf.println("2");
+            dxf.println("BLOCKS");
+            dxf.println("0");
+            dxf.println("ENDSEC");
+
+            dxf.println("0");
+            dxf.println("SECTION");
+            dxf.println("2");
+            dxf.println("ENTITIES");
+
+            // --- Линии ---
+            for (MapLine line : lines) {
+                List<MapPoint> pts = line.getPoints();
+                int dxfColor = javaColorToDxf(line.getColor());
+                for (int i = 0; i < pts.size() - 1; i++) {
+                    MapPoint a = pts.get(i);
+                    MapPoint b = pts.get(i + 1);
+
+                    dxf.println("0");
+                    dxf.println("LINE");
+                    dxf.println("8");
+                    dxf.println("0");        // слой
+                    dxf.println("62");
+                    dxf.println(dxfColor);   // цвет линии
+
+                    dxf.println("10");
+                    dxf.println(a.getX());
+                    dxf.println("20");
+                    dxf.println(a.getY());
+                    dxf.println("30");
+                    dxf.println(a.getZ());
+
+                    dxf.println("11");
+                    dxf.println(b.getX());
+                    dxf.println("21");
+                    dxf.println(b.getY());
+                    dxf.println("31");
+                    dxf.println(b.getZ());
+                }
+            }
+
+            // --- Точки ---
+            for (MapPoint p : points) {
+                // точка
+                dxf.println("0");
+                dxf.println("POINT");
+                dxf.println("8");
+                dxf.println("0");
+                dxf.println("10");
+                dxf.println(p.getX());
+                dxf.println("20");
+                dxf.println(p.getY());
+                dxf.println("30");
+                dxf.println(p.getZ());
+
+                // текст с ID точки
+                dxf.println("0");
+                dxf.println("TEXT");
+                dxf.println("8");
+                dxf.println("0");
+                dxf.println("10");
+                dxf.println(p.getX() + 2.0); // смещаем текст вправо
+                dxf.println("20");
+                dxf.println(p.getY() + 2.0); // смещаем текст вверх
+                dxf.println("30");
+                dxf.println(p.getZ());
+                dxf.println("40");
+                dxf.println(2.0);            // высота текста
+                dxf.println("1");
+                dxf.println(String.valueOf(p.getId())); // сам текст
+            }
+
+            // --- Конец секции ---
+            dxf.println("0");
+            dxf.println("ENDSEC");
+            dxf.println("0");
+            dxf.println("EOF");
+
+            JOptionPane.showMessageDialog(this, "DXF успешно сохранён: " + file.getName());
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Ошибка при сохранении DXF: " + e.getMessage());
+        }
+    }
+
+    // --- Преобразование Java Color -> AutoCAD DXF Color ---
+    private int javaColorToDxf(Color color) {
+        if (Color.RED.equals(color)) return 1;
+        if (Color.GREEN.equals(color)) return 3;
+        if (Color.BLUE.equals(color)) return 5;
+        if (Color.BLACK.equals(color)) return 7;
+        return 7; // по умолчанию
+    }
+
+    /**
+     * Создаёт слой в DXF
+     */
+    private void createLayer(PrintWriter out, String name, int color, String lineType) {
+        out.println("0");
+        out.println("LAYER");
+        out.println("2"); out.println(name);
+        out.println("70"); out.println(0);
+        out.println("62"); out.println(color);
+        out.println("6"); out.println(lineType);
+    }
+
+    /**
+     * Создаёт тип линии в DXF
+     */
+    private void createLineType(PrintWriter out, String name, String pattern) {
+        out.println("0");
+        out.println("LTYPE");
+        out.println("2"); out.println(name);
+        out.println("70"); out.println(0);
+        out.println("3"); out.println(pattern);
+        out.println("72"); out.println(65);
+        out.println("73"); out.println(0);
+        out.println("40"); out.println(0.0);
+    }
+
+    /**
+     * Преобразует java.awt.Color в DXF индекс цвета (0-255)
+     */
+    private int getDXFColor(Color color) {
+        if (color.equals(Color.RED)) return 1;
+        if (color.equals(Color.YELLOW)) return 2;
+        if (color.equals(Color.GREEN)) return 3;
+        if (color.equals(Color.CYAN)) return 6;
+        if (color.equals(Color.BLUE)) return 5;
+        if (color.equals(Color.MAGENTA)) return 4;
+        if (color.equals(Color.BLACK)) return 7;
+        return 7; // по умолчанию
+    }
+
 }

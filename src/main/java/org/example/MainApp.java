@@ -57,18 +57,14 @@ public class MainApp {
             lineBlack.addActionListener(e -> map.startLineDrawing(Color.BLACK, MapLine.LineStyle.SOLID));
             lineBlue.addActionListener(e -> map.startLineDrawing(Color.BLUE, MapLine.LineStyle.SOLID));
             lineGreen.addActionListener(e -> map.startLineDrawing(Color.GREEN, MapLine.LineStyle.SOLID));
-
             lineRedDashed.addActionListener(e -> map.startLineDrawing(Color.RED, MapLine.LineStyle.DASHED));
-
             finishLine.addActionListener(e -> map.finishLineDrawing());
             clearLines.addActionListener(e -> map.clearLines());
 
             controls.add(lineBlack);
             controls.add(lineBlue);
             controls.add(lineGreen);
-
             controls.add(lineRedDashed);
-
             controls.add(finishLine);
             controls.add(clearLines);
 
@@ -106,11 +102,25 @@ public class MainApp {
                 }
             });
 
+            JMenuItem saveDXF = new JMenuItem("Сохранить DXF");
+            saveDXF.addActionListener(e -> {
+                JFileChooser fc = new JFileChooser();
+                if (fc.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {
+                    File dxfFile = fc.getSelectedFile();
+                    // Если нет расширения, добавляем .dxf
+                    if (!dxfFile.getName().toLowerCase().endsWith(".dxf")) {
+                        dxfFile = new File(dxfFile.getParentFile(), dxfFile.getName() + ".dxf");
+                    }
+                    map.saveToDXF(dxfFile);
+                }
+            });
+
             JMenuItem printItem = new JMenuItem("Печать на принтер");
             printItem.addActionListener(e -> map.showPrintPreview());
 
             file.add(open);
             file.add(savePNG);
+            file.add(saveDXF); // DXF пункт меню
             file.add(printItem);
             bar.add(file);
             frame.setJMenuBar(bar);
