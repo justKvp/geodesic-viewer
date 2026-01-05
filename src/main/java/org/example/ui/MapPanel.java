@@ -26,6 +26,13 @@ public class MapPanel extends JPanel {
     private final JLabel tooltipLabel = new JLabel();
     private final JWindow tooltipWindow;
 
+    private volatile boolean loading = false;
+
+    public void setLoading(boolean loading) {
+        this.loading = loading;
+        repaint();
+    }
+
     public MapPanel() {
         setBackground(Color.WHITE);
         enableDrag();
@@ -76,6 +83,21 @@ public class MapPanel extends JPanel {
                 new MapPoint(-200, -150, 60, 7, "Отрицательные X и Y") // Z=60
         ));
         fitPointsToScreen();
+        repaint();
+    }
+
+    public void setScaleByRatio(double ratio) {
+        // текущий центр экрана в мировых координатах
+        double centerWorldX = offsetX + getWidth() / (2 * scale);
+        double centerWorldY = offsetY + getHeight() / (2 * scale);
+
+        // новый scale (1 : N)
+        scale = 1.0 / ratio;
+
+        // пересчитываем offset, чтобы центр остался тем же
+        offsetX = centerWorldX - getWidth() / (2 * scale);
+        offsetY = centerWorldY - getHeight() / (2 * scale);
+
         repaint();
     }
 
@@ -188,6 +210,22 @@ public class MapPanel extends JPanel {
         drawGrid(g2);
         drawGuides(g2);
         drawPoints(g2);
+
+        // --- overlay загрузки ---
+        if (loading) {
+            g2.setColor(new Color(0, 0, 0, 120));
+            g2.fillRect(0, 0, getWidth(), getHeight());
+
+            g2.setColor(Color.WHITE);
+            g2.setFont(new Font("Arial", Font.BOLD, 24));
+
+            String text = "Загрузка...";
+            FontMetrics fm = g2.getFontMetrics();
+            int x = (getWidth() - fm.stringWidth(text)) / 2;
+            int y = (getHeight() + fm.getAscent()) / 2;
+
+            g2.drawString(text, x, y);
+        }
     }
 
     private void drawPoints(Graphics2D g) {
