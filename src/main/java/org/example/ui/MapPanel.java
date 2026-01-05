@@ -221,14 +221,29 @@ public class MapPanel extends JPanel {
     }
 
     private void drawPoints(Graphics2D g) {
+        int baseSize = 8; // базовый размер точки
+        int size = Math.max(baseSize, (int)(baseSize * scale)); // увеличиваем размер точек при зуме
+
+        g.setFont(new Font("Arial", Font.PLAIN, Math.max(10, (int)(10 * scale)))); // размер шрифта зависит от scale
         g.setColor(Color.RED);
-        int size = Math.max(8, (int)(12 * scale)); // масштабируем с zoom
+
         for (MapPoint p : points) {
             Point pt = worldToScreen(p.getX(), p.getY());
-            if(pt.x < -size || pt.y < -size || pt.x > getWidth()+size || pt.y > getHeight()+size) continue;
+
+            // рисуем только видимые точки
+            if (pt.x < -size || pt.y < -size || pt.x > getWidth() + size || pt.y > getHeight() + size)
+                continue;
+
+            // точка
             g.fillOval(pt.x - size/2, pt.y - size/2, size, size);
+
+            // текст рядом с точкой
+            g.setColor(Color.BLACK);
+            g.drawString(String.valueOf(p.getId()), pt.x + size/2 + 2, pt.y - size/2 - 2);
+            g.setColor(Color.RED); // возвращаем цвет для точек на всякий случай
         }
     }
+
 
     private void drawGuides(Graphics2D g) {
         int width = getWidth();
